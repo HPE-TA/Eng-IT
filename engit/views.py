@@ -100,36 +100,36 @@ def collects(request):
             print("In progress: ({}/{}) paragraph have finished to convert text to audio.".format(
                 str(n_paragraph), str(len_paragraph + 1)))
 
-            # Create a audio file
-            audio.export(output_audio, format="mp3")
+        # Create a audio file
+        audio.export(output_audio, format="mp3")
 
-            # Delete Temporary Audio File
-            if os.path.isfile(tmp_output_audio):
-                os.remove(tmp_output_audio)
-            else:
-                print("Error: Temporary Audio File {} not found".format(tmp_output_audio))
+        # Delete Temporary Audio File
+        if os.path.isfile(tmp_output_audio):
+            os.remove(tmp_output_audio)
+        else:
+            print("Error: Temporary Audio File {} not found".format(tmp_output_audio))
 
-            # Update File for production
+        # Update File for production
 
-            # remove img tag
-            regex_img = r"<img .*?/>"
+        # remove img tag
+        regex_img = r"<img .*?/>"
 
-            # Add record to Model
-            record = Article(
-                title=str(article['title']),
-                body=re.sub(regex_img, "", str(body_html)),
-                author=str(article['author']),
-                published_at=datetime.strptime(article['publishedAt'], '%Y-%m-%dT%H:%M:%SZ'),
-                source_url=str(article['url']),
-                is_published=False
-            )
-            record.save()
+        # Add record to Model
+        record = Article(
+            title=str(article['title']),
+            body=re.sub(regex_img, "", str(body_html)),
+            author=str(article['author']),
+            published_at=datetime.strptime(article['publishedAt'], '%Y-%m-%dT%H:%M:%SZ'),
+            source_url=str(article['url']),
+            is_published=False
+        )
+        record.save()
 
-            # Update record with Audio URL
-            if str(settings.AUDIOFILES_STORE) == 'LOCAL':
-                Article.objects.filter(title=str(article['title'])).update(
-                    audio_url='engit/audio/' + audio_file_name)
-                Article.objects.filter(title=str(article['title'])).update(is_published=True)
+        # Update record with Audio URL
+        if str(settings.AUDIOFILES_STORE) == 'LOCAL':
+            Article.objects.filter(title=str(article['title'])).update(
+                audio_url='engit/audio/' + audio_file_name)
+            Article.objects.filter(title=str(article['title'])).update(is_published=True)
 
     # upate time file
     with open(time_file, 'w') as tf:
