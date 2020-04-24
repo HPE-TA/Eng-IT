@@ -128,7 +128,7 @@ def collects(request):
             # Update record with Audio URL
             if str(settings.AUDIOFILES_STORE) == 'LOCAL':
                 Article.objects.filter(title=str(article['title'])).update(
-                    audio_url='https://' + request.get_host() + '/static/engit/audio/' + audio_file_name)
+                    audio_url='engit/audio/' + audio_file_name)
                 Article.objects.filter(title=str(article['title'])).update(is_published=True)
 
     # upate time file
