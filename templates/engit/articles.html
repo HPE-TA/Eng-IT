@@ -3,7 +3,7 @@
 
 {% block page_title %}Eng-IT{% endblock page_title %}
 
-{% block logo_link %}{% url 'engit:article_list_pagenated' page=1 %}{% endblock logo_link %}
+{% block logo_link %}{% url 'engit:index' %}{% endblock logo_link %}
 
 {% block navigation %}
 <form class="form-inline" action="{% url 'engit:article_list_pagenated' 1 %}" method="get">

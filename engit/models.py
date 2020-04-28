@@ -15,4 +15,11 @@ class Article(models.Model):
     is_published = models.BooleanField()
 
     def __str__(self):
-        return self.title
+        return '{} - {} - {}'.format(
+            self.title,
+            self.author,
+            self.published_at
+        )
+
+    def __repr__(self):
+        return self.__str__()

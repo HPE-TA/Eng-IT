@@ -2,6 +2,7 @@ from django.shortcuts import render
 from django.shortcuts import redirect
 from django.views import View
 from django.http import Http404
+from django.http.response import JsonResponse
 from django.conf import settings
 from .models import Article
 
@@ -37,7 +38,7 @@ def collects(request):
         'pageSize=3&'
         'apiKey=' + newsapi_key
     )
-    articles = requests.get(newsapi_url)
+    articles = requests.get(newsapi_url).json()
     now_time = datetime.utcnow().replace(microsecond=0).isoformat()
 
     # Set time of before working using time_file like flag file
@@ -49,8 +50,8 @@ def collects(request):
     else:
         oldest = datetime(1970, 1, 1)
 
-    # for article in articles.get('articles'):
-    for article in articles.json()['articles']:
+    recorded = []
+    for article in articles['articles']:
         publishedat = datetime.strptime(article['publishedAt'], '%Y-%m-%dT%H:%M:%SZ')
 
         if publishedat <= oldest:
@@ -127,6 +128,7 @@ def collects(request):
             is_published=False
         )
         record.save()
+        recorded.append(str(record))
 
         # Update record with Audio URL
         # TODO: Azure Blob Storage とかに入れるほうが望ましい。
@@ -140,7 +142,11 @@ def collects(request):
     with open(time_file, 'w') as tf:
         tf.write(now_time)
 
-    return render(request, 'engit/collects.json', {})
+    json_res = {
+        'newsapi': articles,
+        'db_insert': recorded
+    }
+    return JsonResponse(json_res, json_dumps_params={'indent': 4})
 
 
 class ArticleListView(View):
