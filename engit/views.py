@@ -30,9 +30,11 @@ index = IndexView.as_view()
 def collects(request):
     # Collecting Article by NewsAPI
     newsapi_key = os.environ["NEWSAPI_KEY"]
+    # TODO: APIの処理に時間がかかるので3件に絞っている
     newsapi_url = (
         'http://newsapi.org/v2/top-headlines?'
         'sources=TechCrunch&'
+        'pageSize=3&'
         'apiKey=' + newsapi_key
     )
     articles = requests.get(newsapi_url)
@@ -54,6 +56,7 @@ def collects(request):
         if publishedat <= oldest:
             continue
 
+        # 日本語の記事は除外。
         if 'jp.techcrunch.com' in article['url']:
             continue
 
@@ -126,12 +129,14 @@ def collects(request):
         record.save()
 
         # Update record with Audio URL
+        # TODO: Azure Blob Storage とかに入れるほうが望ましい。
         if str(settings.AUDIOFILES_STORE) == 'LOCAL':
             Article.objects.filter(title=str(article['title'])).update(
                 audio_url='engit/audio/' + audio_file_name)
             Article.objects.filter(title=str(article['title'])).update(is_published=True)
 
     # upate time file
+    # TODO: 収集済みの記事の最新時刻のほうがよい。
     with open(time_file, 'w') as tf:
         tf.write(now_time)
 
