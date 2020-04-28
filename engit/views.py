@@ -5,14 +5,18 @@ from django.http import Http404
 from django.conf import settings
 from .models import Article
 
+# import logging
 import urllib.request
 import requests
 import os
 import re
 from bs4 import BeautifulSoup
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from google.cloud import texttospeech
 from pydub import AudioSegment
+
+# logger = logging.getLogger(__name__)
+# If you need a logging feature for debug purpose, uncomment above.
 
 
 class IndexView(View):
@@ -24,10 +28,15 @@ index = IndexView.as_view()
 
 
 def collects(request):
-    engit_env = os.environ["DJANGO_SETTINGS_MODULE"].split(',')[2]
     # Collecting Article by NewsAPI
     newsapi_key = os.environ["NEWSAPI_KEY"]
-    newsapi_url = ('https://newsapi.org/v2/top-headlines?' + request.GET.urlencode() + '&apikey=' + newsapi_key)
+    # TODO: APIの処理に時間がかかるので3件に絞っている
+    newsapi_url = (
+        'http://newsapi.org/v2/top-headlines?'
+        'sources=TechCrunch&'
+        'pageSize=3&'
+        'apiKey=' + newsapi_key
+    )
     articles = requests.get(newsapi_url)
     now_time = datetime.utcnow().replace(microsecond=0).isoformat()
 
@@ -38,8 +47,8 @@ def collects(request):
             lines = tf.readlines()
             oldest = datetime.strptime(lines[0], '%Y-%m-%dT%H:%M:%S')
     else:
-            oldest = datetime(1970, 1, 1)
-    
+        oldest = datetime(1970, 1, 1)
+
     # for article in articles.get('articles'):
     for article in articles.json()['articles']:
         publishedat = datetime.strptime(article['publishedAt'], '%Y-%m-%dT%H:%M:%SZ')
@@ -47,53 +56,57 @@ def collects(request):
         if publishedat <= oldest:
             continue
 
+        # 日本語の記事は除外。
+        if 'jp.techcrunch.com' in article['url']:
+            continue
+
         tmp_file_name = os.path.basename(article['url'].rstrip('/'))
         tmp_output_audio = str(os.path.join(settings.TMP_AUDIO_DIR[0], tmp_file_name + '-tmp.mp3'))
         audio_file_name = tmp_file_name + '.mp3'
         output_audio = str(os.path.join(settings.AUDIOFILES_DIR[0], audio_file_name))
 
-        if article['source']['name'] == 'TechCrunch':
-            # crawling (Get Body of an Article)
-            html = urllib.request.urlopen(article['url'])
-            soup = BeautifulSoup(html, 'html.parser')
-            ## Get Contents
-            contents_html = soup.find("div",{"class":"article-content"})
+        # crawling (Get Body of an Article)
+        html = urllib.request.urlopen(article['url'])
+        soup = BeautifulSoup(html, 'html.parser')
+        # Get Contents
+        contents_html = soup.find("div", {"class": "article-content"})
 
-            # Convert text to audio
-            len_paragraph = len(contents_html.find_all(["p","h2"])) - 1
-            tmp_body_html = contents_html.find_all(["p","h2"])
-            body_html = BeautifulSoup( '\n\n'.join(str(tb) for tb in tmp_body_html), 'html.parser')
+        # Convert text to audio
+        len_paragraph = len(contents_html.find_all(["p", "h2"])) - 1
+        tmp_body_html = contents_html.find_all(["p", "h2"])
+        body_html = BeautifulSoup('\n\n'.join(str(tb) for tb in tmp_body_html), 'html.parser')
 
-            for n_paragraph, paragraph in enumerate(contents_html.find_all(["p","h2"]), 1):
-                client = texttospeech.TextToSpeechClient()
-                input_text = texttospeech.types.SynthesisInput(text=paragraph.get_text())
+        for n_paragraph, paragraph in enumerate(contents_html.find_all(["p", "h2"]), 1):
+            client = texttospeech.TextToSpeechClient()
+            input_text = texttospeech.types.SynthesisInput(text=paragraph.get_text())
 
-                voice = texttospeech.types.VoiceSelectionParams(
-                    language_code='en-US',
-                    ssml_gender=texttospeech.enums.SsmlVoiceGender.FEMALE)
-            
-                audio_config = texttospeech.types.AudioConfig(
-                    audio_encoding=texttospeech.enums.AudioEncoding.MP3)
+            voice = texttospeech.types.VoiceSelectionParams(
+                language_code='en-US',
+                ssml_gender=texttospeech.enums.SsmlVoiceGender.FEMALE)
 
-                response = client.synthesize_speech(input_text, voice, audio_config)
+            audio_config = texttospeech.types.AudioConfig(
+                audio_encoding=texttospeech.enums.AudioEncoding.MP3)
 
-                ## The response's audio_content is binary.
-                with open(tmp_output_audio, 'wb') as out:
-                    out.write(response.audio_content)
+            response = client.synthesize_speech(input_text, voice, audio_config)
 
-                if n_paragraph == 1:
-                    print("Title: {}".format(article['title']))
-                    print("Start Converting")
-                    audio = AudioSegment.from_file(tmp_output_audio, "mp3")
-                else:
-                    audio = audio + AudioSegment.from_file(tmp_output_audio, "mp3")
+            # The response's audio_content is binary.
+            with open(tmp_output_audio, 'wb') as out:
+                out.write(response.audio_content)
 
-                print("In progress: ({}/{}) paragraph have finished to convert text to audio.".format(str(n_paragraph), str(len_paragraph + 1)))
-        
-        ## Create a audio file
+            if n_paragraph == 1:
+                print("Title: {}".format(article['title']))
+                print("Start Converting")
+                audio = AudioSegment.from_file(tmp_output_audio, "mp3")
+            else:
+                audio = audio + AudioSegment.from_file(tmp_output_audio, "mp3")
+
+            print("In progress: ({}/{}) paragraph have finished to convert text to audio.".format(
+                str(n_paragraph), str(len_paragraph + 1)))
+
+        # Create a audio file
         audio.export(output_audio, format="mp3")
 
-        ## Delete Temporary Audio File
+        # Delete Temporary Audio File
         if os.path.isfile(tmp_output_audio):
             os.remove(tmp_output_audio)
         else:
@@ -103,23 +116,27 @@ def collects(request):
 
         # remove img tag
         regex_img = r"<img .*?/>"
-        
-        # Add record to Model 
-        record = Article(title = str(article['title']),
-                    body = re.sub(regex_img, "", str(body_html)),
-                    author = str(article['author']),
-                    published_at = datetime.strptime(article['publishedAt'], '%Y-%m-%dT%H:%M:%SZ'),
-                    source_url = str(article['url']),
-                    is_published = False)
+
+        # Add record to Model
+        record = Article(
+            title=str(article['title']),
+            body=re.sub(regex_img, "", str(body_html)),
+            author=str(article['author']),
+            published_at=datetime.strptime(article['publishedAt'], '%Y-%m-%dT%H:%M:%SZ'),
+            source_url=str(article['url']),
+            is_published=False
+        )
         record.save()
 
-        ## Update record with Audio URL
+        # Update record with Audio URL
+        # TODO: Azure Blob Storage とかに入れるほうが望ましい。
         if str(settings.AUDIOFILES_STORE) == 'LOCAL':
-            #Article.objects.filter(title=str(article['title'])).update(audio_url='https://'+ request.get_host() + '/static/engit/audio/' + audio_file_name)
-            Article.objects.filter(title=str(article['title'])).update(audio_url='http://engit-' + engit_env + '.japaneast.cloudapp.azure.com' + request.get_host() + '/static/engit/audio/' + audio_file_name)
+            Article.objects.filter(title=str(article['title'])).update(
+                audio_url='engit/audio/' + audio_file_name)
             Article.objects.filter(title=str(article['title'])).update(is_published=True)
 
     # upate time file
+    # TODO: 収集済みの記事の最新時刻のほうがよい。
     with open(time_file, 'w') as tf:
         tf.write(now_time)
 
