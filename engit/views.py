@@ -15,6 +15,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from google.cloud import texttospeech
 from pydub import AudioSegment
+from pydub.exceptions import CouldntDecodeError
 
 # logger = logging.getLogger(__name__)
 # If you need a logging feature for debug purpose, uncomment above.
@@ -94,48 +95,52 @@ def collects(request):
             with open(tmp_output_audio, 'wb') as out:
                 out.write(response.audio_content)
 
-            if n_paragraph == 1:
-                print("Title: {}".format(article['title']))
-                print("Start Converting")
-                audio = AudioSegment.from_file(tmp_output_audio, "mp3")
-            else:
-                audio = audio + AudioSegment.from_file(tmp_output_audio, "mp3")
+            try:
+                if n_paragraph == 1:
+                    print("Title: {}".format(article['title']))
+                    print("Start Converting")
+                    audio = AudioSegment.from_file(tmp_output_audio, "mp3")
+                else:
+                    audio = audio + AudioSegment.from_file(tmp_output_audio, "mp3")
+            except CouldntDecodeError:
+                break
 
             print("In progress: ({}/{}) paragraph have finished to convert text to audio.".format(
                 str(n_paragraph), str(len_paragraph + 1)))
 
-        # Create a audio file
-        audio.export(output_audio, format="mp3")
-
-        # Delete Temporary Audio File
-        if os.path.isfile(tmp_output_audio):
-            os.remove(tmp_output_audio)
         else:
-            print("Error: Temporary Audio File {} not found".format(tmp_output_audio))
+            # Create a audio file
+            audio.export(output_audio, format="mp3")
 
-        # Update File for production
+            # Delete Temporary Audio File
+            if os.path.isfile(tmp_output_audio):
+                os.remove(tmp_output_audio)
+            else:
+                print("Error: Temporary Audio File {} not found".format(tmp_output_audio))
 
-        # remove img tag
-        regex_img = r"<img .*?/>"
+            # Update File for production
 
-        # Add record to Model
-        record = Article(
-            title=str(article['title']),
-            body=re.sub(regex_img, "", str(body_html)),
-            author=str(article['author']),
-            published_at=datetime.strptime(article['publishedAt'], '%Y-%m-%dT%H:%M:%SZ'),
-            source_url=str(article['url']),
-            is_published=False
-        )
-        record.save()
-        recorded.append(str(record))
+            # remove img tag
+            regex_img = r"<img .*?/>"
 
-        # Update record with Audio URL
-        # TODO: Azure Blob Storage とかに入れるほうが望ましい。
-        if str(settings.AUDIOFILES_STORE) == 'LOCAL':
-            Article.objects.filter(title=str(article['title'])).update(
-                audio_url='engit/audio/' + audio_file_name)
-            Article.objects.filter(title=str(article['title'])).update(is_published=True)
+            # Add record to Model
+            record = Article(
+                title=str(article['title']),
+                body=re.sub(regex_img, "", str(body_html)),
+                author=str(article['author']),
+                published_at=datetime.strptime(article['publishedAt'], '%Y-%m-%dT%H:%M:%SZ'),
+                source_url=str(article['url']),
+                is_published=False
+            )
+            record.save()
+            recorded.append(str(record))
+
+            # Update record with Audio URL
+            # TODO: Azure Blob Storage とかに入れるほうが望ましい。
+            if str(settings.AUDIOFILES_STORE) == 'LOCAL':
+                Article.objects.filter(title=str(article['title'])).update(
+                    audio_url='engit/audio/' + audio_file_name)
+                Article.objects.filter(title=str(article['title'])).update(is_published=True)
 
     # upate time file
     # TODO: 収集済みの記事の最新時刻のほうがよい。
