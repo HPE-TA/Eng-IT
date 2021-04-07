@@ -62,8 +62,8 @@ def collects(request):
             continue
 
         tmp_file_name = os.path.basename(article['url'].rstrip('/'))
-        tmp_output_audio = str(os.path.join(settings.TMP_AUDIO_DIR[0], tmp_file_name + '-tmp.mp3'))
-        audio_file_name = tmp_file_name + '.mp3'
+        tmp_output_audio = str(os.path.join(settings.TMP_AUDIO_DIR[0], tmp_file_name + '-tmp.wav'))
+        audio_file_name = tmp_file_name + '.wav'
         output_audio = str(os.path.join(settings.AUDIOFILES_DIR[0], audio_file_name))
 
         # crawling (Get Body of an Article)
@@ -79,16 +79,16 @@ def collects(request):
 
         for n_paragraph, paragraph in enumerate(contents_html.find_all(["p", "h2"]), 1):
             client = texttospeech.TextToSpeechClient()
-            input_text = texttospeech.types.SynthesisInput(text=paragraph.get_text())
+            input_text = texttospeech.SynthesisInput(text=paragraph.get_text())
 
-            voice = texttospeech.types.VoiceSelectionParams(
+            voice = texttospeech.VoiceSelectionParams(
                 language_code='en-US',
-                ssml_gender=texttospeech.enums.SsmlVoiceGender.FEMALE)
+                ssml_gender=texttospeech.SsmlVoiceGender.FEMALE)
 
-            audio_config = texttospeech.types.AudioConfig(
-                audio_encoding=texttospeech.enums.AudioEncoding.MP3)
+            audio_config = texttospeech.AudioConfig(
+                audio_encoding=texttospeech.AudioEncoding.LINEAR16)
 
-            response = client.synthesize_speech(input_text, voice, audio_config)
+            response = client.synthesize_speech(input=input_text, voice=voice, audio_config=audio_config)
 
             # The response's audio_content is binary.
             with open(tmp_output_audio, 'wb') as out:
@@ -97,15 +97,15 @@ def collects(request):
             if n_paragraph == 1:
                 print("Title: {}".format(article['title']))
                 print("Start Converting")
-                audio = AudioSegment.from_file(tmp_output_audio, "mp3")
+                audio = AudioSegment.from_file(tmp_output_audio)
             else:
-                audio = audio + AudioSegment.from_file(tmp_output_audio, "mp3")
+                audio = audio + AudioSegment.from_file(tmp_output_audio)
 
             print("In progress: ({}/{}) paragraph have finished to convert text to audio.".format(
                 str(n_paragraph), str(len_paragraph + 1)))
 
         # Create a audio file
-        audio.export(output_audio, format="mp3")
+        audio.export(output_audio)
 
         # Delete Temporary Audio File
         if os.path.isfile(tmp_output_audio):
